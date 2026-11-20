@@ -21,7 +21,17 @@ npm start          # serves on http://localhost:8080 (needs python3)
 ```
 
 Any static file server works. ES modules and the service worker need `http://`, not `file://`.
-To install on a phone, host the folder anywhere with HTTPS (e.g. GitHub Pages) and use "Add to Home Screen".
+
+## Install on your phone
+
+The app is hosted with GitHub Pages at **https://w5s9n6grfy-sketch.github.io/App/**
+(Settings → Pages → Deploy from a branch → `claude/fitness-app-im9vtq`, folder `/ (root)`).
+
+- **iPhone (Safari):** open the link → Share button → **Add to Home Screen**.
+- **Android (Chrome):** open the link → ⋮ menu → **Install app** (or **Add to Home screen**).
+
+Once installed it opens full-screen like a normal app and works offline. Data is stored on the device;
+use Settings → Export backup to keep a copy.
 
 ## Test
 

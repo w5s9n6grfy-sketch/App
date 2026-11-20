@@ -1,7 +1,8 @@
 // Network-first service worker: always fresh when online, works offline from cache.
-const CACHE = 'fitlog-v1';
+const CACHE = 'fitlog-v2';
 const ASSETS = [
   './', './index.html', './styles.css', './manifest.webmanifest', './icon.svg',
+  './apple-touch-icon.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png',
   './js/app.js', './js/store.js', './js/stats.js', './js/chart.js', './js/exercises.js',
 ];
 
