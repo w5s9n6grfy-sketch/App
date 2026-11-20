@@ -1,0 +1,11 @@
+{
+  "name": "fitlog",
+  "version": "1.0.0",
+  "description": "Offline-first workout tracker (PWA)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test"
+  }
+}
