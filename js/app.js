@@ -245,7 +245,27 @@ const empty = (emoji, title, text) => `<div class="empty"><span class="emoji" ar
 function openModal(html) {
   $('#modal').innerHTML = `<div class="backdrop" data-action="backdrop"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
 }
-function closeModal() { $('#modal').innerHTML = ''; }
+function closeModal() {
+  $('#modal').innerHTML = '';
+  if (pendingAsk) { const r = pendingAsk; pendingAsk = null; r(false); }
+}
+
+// In-app confirmation dialog (native confirm() is unavailable in some embedded views).
+let pendingAsk = null;
+function ask(message, okLabel = 'Confirm') {
+  closeModal();
+  openModal(`<p class="ask-msg">${esc(message)}</p>
+    <div class="row gap"><button class="btn grow" data-action="ask-no">Cancel</button>
+    <button class="btn primary grow" data-action="ask-yes">${esc(okLabel)}</button></div>`);
+  $('[data-action="ask-yes"]').focus();
+  return new Promise((resolve) => { pendingAsk = resolve; });
+}
+function answer(yes) {
+  const r = pendingAsk;
+  pendingAsk = null;
+  $('#modal').innerHTML = '';
+  r?.(yes);
+}
 
 let toastTimer;
 function toast(msg) {
@@ -358,8 +378,8 @@ const actions = {
     render();
     openPicker();
   },
-  repeat(b) {
-    if (state.active && !confirm('You already have a workout in progress. Replace it?')) return;
+  async repeat(b) {
+    if (state.active && !await ask('You already have a workout in progress. Replace it?', 'Replace')) return;
     const src = state.workouts.find((w) => w.id === b.dataset.id);
     if (!src) return;
     state.active = newWorkout(src.name, src.exercises.map((e) => ({ name: e.name, sets: e.sets.map((s) => ({ w: s.w || null, r: s.r, done: false })) })));
@@ -382,9 +402,9 @@ const actions = {
     document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === b));
     renderPickerList();
   },
-  'remove-exercise'(b) {
+  async 'remove-exercise'(b) {
     const ex = state.active.exercises[b.dataset.ex];
-    if (ex.sets.some((s) => s.done) && !confirm(`Remove ${ex.name} and its completed sets?`)) return;
+    if (ex.sets.some((s) => s.done) && !await ask(`Remove ${ex.name} and its completed sets?`, 'Remove')) return;
     state.active.exercises.splice(b.dataset.ex, 1);
     save();
     render();
@@ -416,15 +436,15 @@ const actions = {
     render();
     if (set.done) startRest();
   },
-  finish() {
+  async finish() {
     const a = state.active;
     const done = S.finalizeWorkout(a, Date.now());
     if (!done.exercises.length) {
-      if (confirm('No sets with reps were logged. Discard this workout?')) actions['discard-now']();
+      if (await ask('No sets with reps were logged. Discard this workout?', 'Discard')) actions['discard-now']();
       return;
     }
     const undone = a.exercises.some((e) => e.sets.some((s) => !s.done && s.r > 0));
-    if (undone && !confirm('Some sets are not ticked off. They will be saved too — finish anyway?')) return;
+    if (undone && !await ask('Some sets are not ticked off. They will be saved too — finish anyway?', 'Finish')) return;
     const prs = S.findNewPRs(state.workouts, done);
     state.workouts.push(done);
     state.workouts.sort((x, y) => x.start - y.start);
@@ -434,8 +454,8 @@ const actions = {
     render();
     showSummary(done, prs);
   },
-  discard() {
-    if (confirm('Discard this workout? This cannot be undone.')) actions['discard-now']();
+  async discard() {
+    if (await ask('Discard this workout? This cannot be undone.', 'Discard')) actions['discard-now']();
   },
   'discard-now'() {
     state.active = null;
@@ -443,9 +463,9 @@ const actions = {
     stopRest();
     render();
   },
-  'delete-workout'(b) {
+  async 'delete-workout'(b) {
     const w = state.workouts.find((x) => x.id === b.dataset.id);
-    if (!w || !confirm(`Delete “${w.name}” from ${fmtDate(w.start)}?`)) return;
+    if (!w || !await ask(`Delete “${w.name}” from ${fmtDate(w.start)}?`, 'Delete')) return;
     state.workouts = state.workouts.filter((x) => x !== w);
     save();
     render();
@@ -461,6 +481,20 @@ const actions = {
     render();
   },
   export() {
+    const json = JSON.stringify(state, null, 2);
+    openModal(`
+      <header class="sheet-head"><h3>Backup</h3><button class="icon-btn" data-action="close-modal" aria-label="Close">✕</button></header>
+      <p class="muted small">Copy this text and keep it somewhere safe, or download it as a file. Use Import backup to restore it.</p>
+      <textarea id="backup-text" class="backup-text" readonly>${esc(json)}</textarea>
+      <div class="row gap"><button class="btn grow" data-action="download-backup">Download file</button>
+      <button class="btn primary grow" data-action="copy-backup">Copy</button></div>`);
+  },
+  'copy-backup'() {
+    const t = $('#backup-text');
+    navigator.clipboard?.writeText(t.value).then(() => toast('Backup copied'), () => { t.select(); toast('Press Ctrl/Cmd+C to copy'); })
+      ?? (t.select(), toast('Press Ctrl/Cmd+C to copy'));
+  },
+  'download-backup'() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -468,9 +502,11 @@ const actions = {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   },
-  reset() {
-    if (!confirm('Erase ALL workouts, body weight entries and settings?')) return;
-    if (!confirm('Really erase everything? Export a backup first if unsure.')) return;
+  'ask-yes'() { answer(true); },
+  'ask-no'() { answer(false); },
+  async reset() {
+    if (!await ask('Erase ALL workouts, body weight entries and settings?', 'Erase')) return;
+    if (!await ask('Really erase everything? Export a backup first if unsure.', 'Erase everything')) return;
     replaceState(null);
     stopRest();
     render();
@@ -507,7 +543,7 @@ const changes = {
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      if (!confirm('Replace all current data with this backup?')) return;
+      if (!await ask('Replace all current data with this backup?', 'Replace')) return;
       replaceState(data);
       render();
       toast(`Imported ${state.workouts.length} workouts`);
